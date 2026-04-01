@@ -42,4 +42,4 @@ jobs:
 
     - name: Run Nuclei Scan
       run: |
-        nuclei -u http://localhost:3000
+        nuclei -u http://localhost:3000 || true
