@@ -10,15 +10,23 @@ jobs:
     runs-on: self-hosted
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: Verify Java
+        shell: powershell
+        run: |
+          java -version
 
-      - name: Run SonarQube Scan
+      - name: Verify SonarScanner
+        shell: powershell
+        run: |
+          & "C:\sonar-scanner\sonar-scanner-cli-8.0.1.6346-windows-x64\bin\sonar-scanner.bat" --version
+
+      - name: Run SonarQube Scan on local Juice Shop source
         shell: powershell
         run: |
           & "C:\sonar-scanner\sonar-scanner-cli-8.0.1.6346-windows-x64\bin\sonar-scanner.bat" `
             -Dsonar.projectKey=${{ secrets.SONAR_PROJECT_KEY }} `
-            -Dsonar.sources=apps/juice-shop `
+            -Dsonar.projectBaseDir="C:\Users\Ekin Taner\security-thesis-lab\ci-cd-lab\apps\juice-shop" `
+            -Dsonar.sources=. `
             -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} `
             -Dsonar.token=${{ secrets.SONAR_TOKEN }}
 
@@ -42,27 +50,44 @@ jobs:
         run: |
           curl -I http://localhost:3000
 
-      - name: Run OWASP ZAP Scan
+      - name: Run OWASP ZAP Baseline Scan with Docker
         run: |
           docker run --rm \
             --network=host \
             -v "${{ github.workspace }}/reports:/zap/wrk/:rw" \
             ghcr.io/zaproxy/zaproxy:stable \
-            zap-baseline.py -t http://localhost:3000 -r zap-report.html || true
+            zap-baseline.py -t http://localhost:3000 -r zap-report.html -w zap-report.md || true
+
+      - name: Show reports after ZAP
+        run: |
+          echo "Contents of reports directory after ZAP:"
+          ls -la reports || true
 
       - name: Install Nuclei
         run: |
           sudo apt-get update
           sudo apt-get install -y wget unzip
+          mkdir -p /tmp/nuclei-install
+          cd /tmp/nuclei-install
           wget https://github.com/projectdiscovery/nuclei/releases/download/v3.3.7/nuclei_3.3.7_linux_amd64.zip
           unzip -o nuclei_3.3.7_linux_amd64.zip
           sudo mv nuclei /usr/local/bin/
+          nuclei -version
 
-      - name: Run Nuclei
+      - name: Update Nuclei Templates
+        run: |
+          nuclei -update-templates
+
+      - name: Run Nuclei Scan
         run: |
           nuclei -u http://localhost:3000 -o reports/nuclei-report.txt || true
 
-      - name: Upload Reports
+      - name: Show final reports directory
+        run: |
+          echo "Final contents of reports directory:"
+          ls -la reports || true
+
+      - name: Upload all security reports
         uses: actions/upload-artifact@v4
         with:
           name: security-reports
