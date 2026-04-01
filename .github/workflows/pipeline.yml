@@ -30,9 +30,11 @@ jobs:
     - name: Install Nuclei
       run: |
         sudo apt-get update
-        sudo apt-get install -y wget
+        sudo apt-get install -y wget unzip
+        mkdir -p /tmp/nuclei-install
+        cd /tmp/nuclei-install
         wget https://github.com/projectdiscovery/nuclei/releases/download/v3.3.7/nuclei_3.3.7_linux_amd64.zip
-        unzip nuclei_3.3.7_linux_amd64.zip
+        unzip -o nuclei_3.3.7_linux_amd64.zip
         sudo mv nuclei /usr/local/bin/
         nuclei -version
 
