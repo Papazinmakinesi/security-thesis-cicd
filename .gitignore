@@ -1,0 +1,6 @@
+reports/
+*.log
+.env
+.sonar/
+.zap/
+nuclei-report*
