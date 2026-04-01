@@ -28,6 +28,10 @@ jobs:
 
       - name: Run SonarQube Scan on local Juice Shop source
         shell: powershell
+        env:
+          SONAR_PROJECT_KEY: ${{ secrets.SONAR_PROJECT_KEY }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
           $scanner = Get-ChildItem -Path "C:\sonar-scanner" -Recurse -Filter "sonar-scanner.bat" | Select-Object -First 1
           if (-not $scanner) {
@@ -44,12 +48,15 @@ jobs:
           Write-Host "Using scanner: $($scanner.FullName)"
           Write-Host "Using project directory: $projectDir"
 
-          & $scanner.FullName `
-            -Dsonar.projectKey=${{ secrets.SONAR_PROJECT_KEY }} `
-            -Dsonar.projectBaseDir="$projectDir" `
-            -Dsonar.sources=. `
-            -Dsonar.host.url=${{ secrets.SONAR_HOST_URL }} `
-            -Dsonar.token=${{ secrets.SONAR_TOKEN }}
+          $args = @(
+            "-Dsonar.projectKey=$env:SONAR_PROJECT_KEY"
+            "-Dsonar.projectBaseDir=$projectDir"
+            "-Dsonar.sources=."
+            "-Dsonar.host.url=$env:SONAR_HOST_URL"
+            "-Dsonar.token=$env:SONAR_TOKEN"
+          )
+
+          & $scanner.FullName @args
 
   dast-security-test:
     runs-on: ubuntu-latest
