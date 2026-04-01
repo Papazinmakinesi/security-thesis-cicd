@@ -1,0 +1,23 @@
+name: Security Pipeline
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  security-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Run Juice Shop container
+      run: |
+        docker run -d -p 3000:3000 --name juice-shop bkimminich/juice-shop
+        sleep 20
+
+    - name: Check if app is running
+      run: |
+        curl -I http://localhost:3000
