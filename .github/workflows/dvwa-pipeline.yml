@@ -1,0 +1,132 @@
+name: DVWA Security Pipeline
+
+on:
+  workflow_dispatch:
+
+jobs:
+  sast-sonarqube-dvwa:
+    runs-on: self-hosted
+
+    steps:
+      - name: Verify Java
+        shell: powershell
+        run: |
+          java -version
+
+      - name: Verify SonarScanner
+        shell: powershell
+        run: |
+          $scanner = Get-ChildItem -Path "C:\sonar-scanner" -Recurse -Filter "sonar-scanner.bat" | Select-Object -First 1
+          if (-not $scanner) {
+            Write-Error "sonar-scanner.bat not found under C:\sonar-scanner"
+            exit 1
+          }
+          Write-Host "Found scanner at: $($scanner.FullName)"
+          & $scanner.FullName --version
+
+      - name: Run SonarQube Scan on local DVWA source
+        shell: powershell
+        env:
+          SONAR_PROJECT_KEY: ${{ secrets.SONAR_PROJECT_KEY_DVWA }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          $scanner = Get-ChildItem -Path "C:\sonar-scanner" -Recurse -Filter "sonar-scanner.bat" | Select-Object -First 1
+          if (-not $scanner) {
+            Write-Error "sonar-scanner.bat not found under C:\sonar-scanner"
+            exit 1
+          }
+
+          $projectDir = "C:\Users\Ekin Taner\security-thesis-lab\ci-cd-lab\apps\DVWA"
+          if (-not (Test-Path $projectDir)) {
+            Write-Error "Project directory not found: $projectDir"
+            exit 1
+          }
+
+          Write-Host "Using scanner: $($scanner.FullName)"
+          Write-Host "Using project directory: $projectDir"
+
+          $args = @(
+            "-Dsonar.projectKey=$env:SONAR_PROJECT_KEY"
+            "-Dsonar.projectBaseDir=$projectDir"
+            "-Dsonar.sources=."
+            "-Dsonar.host.url=$env:SONAR_HOST_URL"
+            "-Dsonar.token=$env:SONAR_TOKEN"
+          )
+
+          & $scanner.FullName @args
+
+  dast-security-test-dvwa:
+    runs-on: ubuntu-latest
+    needs: sast-sonarqube-dvwa
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Create reports directory
+        run: |
+          mkdir -p reports
+          chmod -R 777 reports
+
+      - name: Run DVWA container
+        run: |
+          docker run -d -p 8080:80 --name dvwa vulnerables/web-dvwa
+          sleep 40
+
+      - name: Check if app is running
+        run: |
+          curl -I http://localhost:8080
+
+      - name: Run OWASP ZAP Baseline Scan with Docker
+        run: |
+          docker run --rm \
+            --network=host \
+            --user root \
+            -v "${{ github.workspace }}/reports:/zap/wrk/:rw" \
+            ghcr.io/zaproxy/zaproxy:stable \
+            /bin/sh -c "zap-baseline.py -t http://localhost:8080 -r dvwa-zap-report.html -w dvwa-zap-report.md || true && ls -la /zap/wrk"
+
+      - name: Show reports after ZAP
+        run: |
+          echo "ZAP reports:"
+          ls -la reports || true
+          find reports -maxdepth 1 -type f || true
+
+      - name: Create fallback ZAP report if missing
+        run: |
+          if [ ! -f reports/dvwa-zap-report.html ] && [ ! -f reports/dvwa-zap-report.md ]; then
+            echo "No ZAP report files found. Creating placeholder." > reports/dvwa-zap-report-missing.txt
+          fi
+
+      - name: Install Nuclei
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y wget unzip
+          mkdir -p /tmp/nuclei-install
+          cd /tmp/nuclei-install
+          wget https://github.com/projectdiscovery/nuclei/releases/download/v3.3.7/nuclei_3.3.7_linux_amd64.zip
+          unzip -o nuclei_3.3.7_linux_amd64.zip
+          sudo mv nuclei /usr/local/bin/
+          nuclei -version
+
+      - name: Update Nuclei Templates
+        run: |
+          nuclei -update-templates
+
+      - name: Run Nuclei Scan
+        run: |
+          nuclei -u http://localhost:8080 -o reports/dvwa-nuclei-report.txt || true
+
+      - name: Show final reports directory
+        run: |
+          echo "Final contents of reports directory:"
+          ls -la reports || true
+          find reports -maxdepth 1 -type f || true
+
+      - name: Upload all DVWA security reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: dvwa-security-reports
+          path: reports/
+          if-no-files-found: warn
