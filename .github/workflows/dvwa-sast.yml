@@ -1,0 +1,59 @@
+name: DVWA SAST Pipeline
+
+on:
+  workflow_dispatch:
+
+jobs:
+  sast-sonarqube-dvwa:
+    runs-on: self-hosted
+
+    steps:
+      - name: Verify Java
+        shell: powershell
+        run: |
+          java -version
+
+      - name: Verify SonarScanner
+        shell: powershell
+        run: |
+          $scanner = Get-ChildItem -Path "C:\sonar-scanner" -Recurse -Filter "sonar-scanner.bat" | Select-Object -First 1
+          if (-not $scanner) {
+            Write-Error "sonar-scanner.bat not found under C:\sonar-scanner"
+            exit 1
+          }
+          Write-Host "Found scanner at: $($scanner.FullName)"
+          & $scanner.FullName --version
+
+      - name: Run SonarQube Scan on local DVWA source
+        shell: powershell
+        env:
+          SONAR_PROJECT_KEY: ${{ secrets.SONAR_PROJECT_KEY_DVWA }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+          $scanner = Get-ChildItem -Path "C:\sonar-scanner" -Recurse -Filter "sonar-scanner.bat" | Select-Object -First 1
+          if (-not $scanner) {
+            Write-Error "sonar-scanner.bat not found under C:\sonar-scanner"
+            exit 1
+          }
+
+          $projectDir = "C:\Users\Ekin Taner\security-thesis-lab\ci-cd-lab\apps\DVWA"
+          if (-not (Test-Path $projectDir)) {
+            Write-Error "Project directory not found: $projectDir"
+            exit 1
+          }
+
+          Write-Host "Using scanner: $($scanner.FullName)"
+          Write-Host "Using project directory: $projectDir"
+          Write-Host "Using SonarQube project key: $env:SONAR_PROJECT_KEY"
+          Write-Host "Using SonarQube host: $env:SONAR_HOST_URL"
+
+          $args = @(
+            "-Dsonar.projectKey=$env:SONAR_PROJECT_KEY"
+            "-Dsonar.projectBaseDir=$projectDir"
+            "-Dsonar.sources=."
+            "-Dsonar.host.url=$env:SONAR_HOST_URL"
+            "-Dsonar.token=$env:SONAR_TOKEN"
+          )
+
+          & $scanner.FullName @args
