@@ -52,6 +52,7 @@ jobs:
             "-Dsonar.projectKey=$env:SONAR_PROJECT_KEY"
             "-Dsonar.projectBaseDir=$projectDir"
             "-Dsonar.sources=."
+            "-Dsonar.exclusions=**/*.java"
             "-Dsonar.host.url=$env:SONAR_HOST_URL"
             "-Dsonar.token=$env:SONAR_TOKEN"
           )
